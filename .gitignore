@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Tooling / dev (no se necesita para el sitio)
+.claude/
+.impeccable/
+
+# Editores
+.vscode/
+.idea/
