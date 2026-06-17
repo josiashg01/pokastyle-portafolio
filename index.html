@@ -2762,7 +2762,7 @@
                 justify-content: center;
                 min-height: 48px;
             }
-            .contact-urgency { margin-top: 32px; }
+            .contact-urgency { margin-top: 32px; font-size: .5rem; letter-spacing: .1em; gap: 6px; }
 
             /* Project page modal — compact header, vertical title row */
             .pp-header { padding: 14px 18px; }
@@ -2865,6 +2865,42 @@
             .about-slider { aspect-ratio: 16/10; max-width: 100%; }
             .contact-section { padding: 60px 32px 72px; }
             .contact-bg-text { display: none; }
+        }
+
+        /* ══ OPTIMIZACIÓN MÓVIL (va último para ganar en orden de fuente) ══ */
+        @media (max-width: 768px) {
+            /* — Piso de 11px: ningún texto visible baja de ahí en celular — */
+            .availability-badge, .hero-tag, .hero-cta, .sec-label, .filter-btn,
+            .pp-back, .pp-badge, .pp-role, .pp-section-label, .pp-stills-count,
+            .pp-next-cat, .pp-no-video p, .pp-no-stills p, .pp-vid-play span,
+            .pp-yt-play-btn span, .sl-counter, .stat-l, .testi-role,
+            .svc-includes li, .svc-cta, .contact-sub, .contact-link,
+            footer p, .intro-hint span, .di-logo, .di-cta,
+            .as-slide-placeholder .ph-label, .skip-link {
+                font-size: 11px;
+            }
+
+            /* Isla de navegación: al subir la fuente, aflojar tracking/padding
+               para que no se desborde en pantallas angostas (360–390px). */
+            .di-logo { letter-spacing: .1em; }
+            .di-cta { letter-spacing: .1em; padding: 8px 12px; }
+
+            /* — Botones de acción ya rellenos de amarillo en móvil (sin hover) — */
+            .pp-back {
+                background: var(--accent);
+                border-color: var(--accent);
+                color: var(--bg);
+            }
+            .svc-cta {
+                background: var(--accent);
+                color: #0a0a0a;
+            }
+            .contact-link {
+                background: var(--accent);
+                border-color: var(--accent);
+                color: var(--bg);
+            }
+            .contact-link svg { color: var(--bg); }
         }
     </style>
 
@@ -3431,6 +3467,10 @@
             let firstScroll = true;
             let lastProgress = 0;
             let filterActive = false;
+            // Touch devices: skip the full-screen motion-blur filter (paint-heavy
+            // on mobile GPUs → janky gesture) and commit the exit on touchend so a
+            // single swipe is enough instead of stalling mid-transition.
+            const isCoarse = window.matchMedia('(pointer: coarse)').matches;
 
             function applyProgress(p) {
                 const clamped = Math.min(1, p);
@@ -3448,7 +3488,7 @@
                     introLogoImg.style.filter = `drop-shadow(0 0 ${60 * glowFade + 20}px rgba(201,168,76,${dsAlpha}))`;
                 }
 
-                const blur = Math.min(6, velocity * 110);
+                const blur = isCoarse ? 0 : Math.min(6, velocity * 110);
                 if (blur > 0.4) {
                     blurNode.setAttribute('stdDeviation', `0 ${blur}`);
                     if (!filterActive) {
@@ -3501,6 +3541,14 @@
                 ty = e.touches[0].clientY;
                 push(d / 320);
             }
+            // On finger release, commit the intro exit (a small upward swipe is
+            // enough) or snap back to the start — so it never stalls half-open and
+            // the user doesn't have to swipe several times.
+            function onTE() {
+                if (done) return;
+                targetProg = targetProg > 0.12 ? 1 : 0;
+                if (!rafId) rafId = requestAnimationFrame(tick);
+            }
 
             function onKey(e) {
                 const down = ['ArrowDown', ' ', 'PageDown'].includes(e.key);
@@ -3513,6 +3561,7 @@
                 window.removeEventListener('wheel', onWheel);
                 document.removeEventListener('touchstart', onTS);
                 document.removeEventListener('touchmove', onTM);
+                document.removeEventListener('touchend', onTE);
                 document.removeEventListener('keydown', onKey);
                 window.scrollTo(0, 0);
                 introScreen.remove();
@@ -3521,6 +3570,7 @@
             window.addEventListener('wheel', onWheel, { passive: false });
             document.addEventListener('touchstart', onTS, { passive: true });
             document.addEventListener('touchmove', onTM, { passive: false });
+            document.addEventListener('touchend', onTE, { passive: true });
             document.addEventListener('keydown', onKey);
         })();
 
