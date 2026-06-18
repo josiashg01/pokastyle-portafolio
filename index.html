@@ -2902,6 +2902,45 @@
             }
             .contact-link svg { color: var(--bg); }
         }
+
+        /* ══ EDITOR DE PORTADAS (solo activo con #editar o ?edit) ══
+           Sliders dentro de cada tarjeta con live-view del encuadre. */
+        .projects-tray.editing { display: grid !important; }
+        .projects-tray.editing .project-thumb-frame { aspect-ratio: 16/10; } /* mismo encuadre que el marquee público */
+        .projects-tray.editing .project-card { overflow: visible; cursor: auto; background: var(--surface); }
+        .projects-tray.editing .project-overlay,
+        .projects-tray.editing .proj-enter { display: none; }
+        .projects-tray.editing .project-thumb { -webkit-user-drag: none; user-select: none; }
+
+        .ce-card-controls {
+            padding: 12px 14px 14px;
+            font-family: 'DM Mono', monospace; color: var(--text);
+            border-top: 1px solid var(--border);
+        }
+        .ce-card-controls .ce-ct {
+            color: var(--accent); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+            margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .ce-crow { display: flex; align-items: center; gap: 8px; margin: 7px 0; font-size: 11px; }
+        .ce-crow .ce-cl { width: 62px; color: var(--text-muted); flex-shrink: 0; }
+        .ce-crow input[type=range] { flex: 1; accent-color: var(--accent); min-width: 0; }
+        .ce-crow output { width: 52px; text-align: right; color: var(--text-muted); flex-shrink: 0; }
+        .ce-card-btns { display: flex; gap: 8px; margin-top: 10px; }
+        .ce-card-btns button {
+            flex: 1; background: transparent; border: 1px solid var(--border); color: var(--text);
+            padding: 7px; border-radius: 6px; font-family: inherit; font-size: 10px;
+            letter-spacing: .05em; text-transform: uppercase; cursor: pointer; transition: border-color .2s, color .2s;
+        }
+        .ce-card-btns button:hover { border-color: var(--accent); color: var(--accent); }
+
+        .ce-export-all {
+            position: fixed; bottom: 18px; right: 18px; z-index: 5000;
+            background: var(--accent); color: var(--bg); border: none; border-radius: 10px;
+            padding: 13px 20px; font-family: 'DM Mono', monospace; font-size: 11px;
+            letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
+        }
+        .ce-export-all:hover { filter: brightness(1.08); }
     </style>
 
     <!-- Datos estructurados -->
@@ -3434,10 +3473,12 @@
             if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
             // If the user reloads while not at the top (or with a project open),
-            // OR the user prefers reduced motion, skip the intro entirely.
+            // OR the user prefers reduced motion, OR the cover editor is active,
+            // skip the intro entirely.
             const savedY = parseInt(sessionStorage.getItem('pokaScrollY') || '0', 10);
             const hadProjectOpen = sessionStorage.getItem('pokaOpenProject') !== null;
-            if (savedY > 5 || hadProjectOpen || prefersReducedMotion.matches) {
+            const coverEditMode = location.hash === '#editar' || new URLSearchParams(location.search).has('edit');
+            if (savedY > 5 || hadProjectOpen || prefersReducedMotion.matches || coverEditMode) {
                 document.body.classList.add('hero-revealed');
                 introScreen.remove();
                 // Wait for layout so the saved Y is reachable, then jump there.
@@ -4372,6 +4413,116 @@
             if (e.key === 'ArrowLeft') showSlide(slIndex - 1);
             if (e.key === 'ArrowRight') showSlide(slIndex + 1);
         });
+
+        // ══ EDITOR DE PORTADAS — sliders dentro de CADA tarjeta con live-view.
+        // Oculto para visitantes: se activa solo con #editar o ?edit en la URL.
+        // Edita sobre una grilla estática con encuadre 16/10 (igual al marquee
+        // público). Cada slider mueve/escala/rota la portada de ese proyecto en
+        // vivo y guarda en localStorage vía saveThumbConfig + applyThumb. Para
+        // que sea permanente para todos, usa "Exportar todo" y pega el JSON.
+        (function () {
+            const EDIT_MODE = location.hash === '#editar' || new URLSearchParams(location.search).has('edit');
+            if (!EDIT_MODE) return;
+
+            function effCfg(idx) {
+                return getEffectiveThumb(idx) || { x: 0, y: 0, w: 100, r: 0 };
+            }
+            const fmt = (k, v) => (+v).toFixed(1) + (k === 'r' ? '°' : '%');
+
+            // Construye los sliders dentro de una tarjeta y los cablea al live-view.
+            function buildControls(card, idx) {
+                if (card.querySelector('.ce-card-controls')) return;
+                const c = effCfg(idx);
+                const title = (projectsData[idx] && projectsData[idx].title) || ('Proyecto ' + idx);
+                const row = (label, k, min, max, val) =>
+                    '<label class="ce-crow"><span class="ce-cl">' + label + '</span>' +
+                    '<input type="range" data-k="' + k + '" min="' + min + '" max="' + max + '" step="0.5" value="' + val + '">' +
+                    '<output data-o="' + k + '">' + fmt(k, val) + '</output></label>';
+                const wrap = document.createElement('div');
+                wrap.className = 'ce-card-controls';
+                wrap.innerHTML =
+                    '<div class="ce-ct">' + title + '</div>' +
+                    row('Pos. X', 'x', -120, 120, c.x) +
+                    row('Pos. Y', 'y', -120, 120, c.y) +
+                    row('Escala', 'w', 40, 240, c.w) +
+                    row('Rotación', 'r', -20, 20, c.r) +
+                    '<div class="ce-card-btns"><button data-act="reset" type="button">Reiniciar</button><button data-act="copy" type="button">Copiar valores</button></div>';
+                card.appendChild(wrap);
+
+                const inputs = {};
+                wrap.querySelectorAll('input[data-k]').forEach(inp => { inputs[inp.dataset.k] = inp; });
+
+                function apply() {
+                    const base = effCfg(idx);
+                    const cfg = { x: +inputs.x.value, y: +inputs.y.value, w: +inputs.w.value, r: +inputs.r.value };
+                    if (base.src) cfg.src = base.src;
+                    saveThumbConfig(idx, cfg);   // persiste
+                    applyThumb(idx, cfg);        // live-view (actualiza la portada al instante)
+                    wrap.querySelectorAll('output[data-o]').forEach(o => {
+                        const k = o.dataset.o; o.textContent = fmt(k, inputs[k].value);
+                    });
+                }
+                wrap.querySelectorAll('input[data-k]').forEach(inp => inp.addEventListener('input', apply));
+
+                wrap.querySelector('[data-act="reset"]').addEventListener('click', () => {
+                    const base = (projectsData[idx] && projectsData[idx].thumb) || { x: 0, y: 0, w: 100, r: 0 };
+                    inputs.x.value = base.x || 0;
+                    inputs.y.value = base.y || 0;
+                    inputs.w.value = base.w !== undefined ? base.w : 100;
+                    inputs.r.value = base.r || 0;
+                    apply();
+                });
+                wrap.querySelector('[data-act="copy"]').addEventListener('click', (e) => {
+                    const base = effCfg(idx);
+                    const out = "thumb: { src: '" + (base.src || '') + "', x: " + (+inputs.x.value).toFixed(1) +
+                        ', y: ' + (+inputs.y.value).toFixed(1) + ', w: ' + (+inputs.w.value).toFixed(1) +
+                        ', r: ' + (+inputs.r.value).toFixed(1) + ' }';
+                    navigator.clipboard.writeText(out);
+                    const b = e.target, t = b.textContent; b.textContent = 'Copiado ✓'; setTimeout(() => b.textContent = t, 1200);
+                });
+            }
+
+            // Evita que un clic en la portada abra el proyecto (deja pasar los controles).
+            document.addEventListener('click', e => {
+                if (e.target.closest('.ce-card-controls') || e.target.closest('.ce-export-all')) return;
+                if (e.target.closest('.projects-tray .project-card')) { e.preventDefault(); e.stopImmediatePropagation(); }
+            }, true);
+
+            // Botón global para exportar todas las configuraciones.
+            const exportBtn = document.createElement('button');
+            exportBtn.className = 'ce-export-all';
+            exportBtn.type = 'button';
+            exportBtn.textContent = 'Exportar todo (JSON)';
+            exportBtn.addEventListener('click', () => {
+                const all = loadThumbConfigs();
+                navigator.clipboard.writeText(JSON.stringify(all, null, 2));
+                console.log('Configs de portadas (pásamelas para hornearlas en projectsData):', all);
+                const t = exportBtn.textContent; exportBtn.textContent = 'JSON copiado ✓'; setTimeout(() => exportBtn.textContent = t, 1400);
+            });
+            document.body.appendChild(exportBtn);
+
+            // Mostrar todas las portadas en grilla estática (16/10) con sus sliders.
+            function openEditTray() {
+                marqueeOuter.style.display = 'none';
+                marqueeOuter2.style.display = 'none';
+                const fr = document.querySelector('.filters-row');
+                if (fr) fr.style.display = 'none';
+                const wf = document.querySelector('.whatsapp-float');
+                if (wf) wf.style.display = 'none';
+                sourceCards.forEach(card => {
+                    card.style.display = '';
+                    const idx = parseInt(card.dataset.project);
+                    if (!isNaN(idx)) buildControls(card, idx);
+                });
+                projectsTray.classList.add('open', 'editing');
+                // Retraso: el "saltar intro" hace un scrollTo(0,0) en rAF que corre
+                // después de esto; esperamos para que no lo pise.
+                const works = document.getElementById('works');
+                if (works) setTimeout(() => works.scrollIntoView({ block: 'start' }), 80);
+            }
+
+            openEditTray();
+        })();
 
     </script>
 </body>
