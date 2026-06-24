@@ -1,0 +1,14 @@
+{
+  "redirects": [
+    {
+      "source": "/cpanel",
+      "destination": "https://priva28.privatednsorg.com:2083",
+      "permanent": false
+    },
+    {
+      "source": "/webmail",
+      "destination": "https://priva28.privatednsorg.com:2096",
+      "permanent": false
+    }
+  ]
+}
